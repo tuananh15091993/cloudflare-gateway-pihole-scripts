@@ -1,59 +1,73 @@
-import { existsSync } from "node:fs";
-import { unlink } from "node:fs/promises";
-import { resolve } from "node:path";
+#!/usr/bin/env node
 
-import {
-  LIST_TYPE,
-  PROCESSING_FILENAME,
-  RECOMMENDED_ALLOWLIST_URLS,
-  RECOMMENDED_BLOCKLIST_URLS,
-  USER_DEFINED_ALLOWLIST_URLS,
-  USER_DEFINED_BLOCKLIST_URLS,
-} from "./lib/constants.js";
-import { downloadFiles } from "./lib/utils.js";
+import { downloadFiles } from './lib/utils.js'
+import { join } from 'path'
 
-const allowlistUrls = USER_DEFINED_ALLOWLIST_URLS || RECOMMENDED_ALLOWLIST_URLS;
-const blocklistUrls = USER_DEFINED_BLOCKLIST_URLS || RECOMMENDED_BLOCKLIST_URLS;
-const listType = process.argv[2];
+const LISTS_DIR = 'lists';
 
-const downloadLists = async (filename, urls) => {
-  const filePath = resolve(`./${filename}`);
-
-  if (existsSync(filePath)) {
-    await unlink(filePath);
-  }
-
+async function downloadLists(listType) {
+  const envVar = listType === 'allowlist' ? 'ALLOWLIST_URLS' : 'BLOCKLIST_URLS';
+  const filename = `${listType}.txt`;
+  const outputPath = join(LISTS_DIR, filename);
+  
+  console.log(`\n=== Downloading ${listType} ===`);
+  
   try {
-    await downloadFiles(filePath, urls);
+    const urlsString = process.env[envVar];
+    
+    if (!urlsString || urlsString.trim() === '') {
+      console.log(`No URLs configured for ${listType} (${envVar} is empty)`);
+      return;
+    }
+    
+    console.log(`Environment variable ${envVar}:`, urlsString);
+    
+    // Download and save files
+    await downloadFiles(urlsString, outputPath);
+    
+    console.log(`✅ Successfully downloaded ${listType}`);
+    
+  } catch (error) {
+    console.error(`❌ An error occurred while processing ${filename}:`);
+    console.error(error);
+    
+    // Print debug information
+    if (process.env[envVar]) {
+      console.log('\nDEBUG - Raw environment variable:');
+      console.log(JSON.stringify(process.env[envVar]));
+      
+      console.log('\nDEBUG - Character codes:');
+      const chars = [...process.env[envVar]].map(char => `${char}(${char.charCodeAt(0)})`);
+      console.log(chars.join(', '));
+    }
+    
+    process.exit(1);
+  }
+}
 
-    console.log(
-      `Done. The ${filename} file contains merged data from the following list(s):`
-    );
-    console.log(
-      urls.reduce(
-        (previous, current, index) => previous + `${index + 1}. ${current}\n`,
-        ""
-      )
-    );
-  } catch (err) {
-    console.error(`An error occurred while processing ${filename}:\n`, err);
-    console.error("URLs:\n", urls);
-    throw err;
+// Main execution
+async function main() {
+  const listType = process.argv[2];
+  
+  if (!listType) {
+    console.error('Usage: node download_lists.js <allowlist|blocklist>');
+    process.exit(1);
   }
-};
+  
+  if (!['allowlist', 'blocklist'].includes(listType)) {
+    console.error('List type must be either "allowlist" or "blocklist"');
+    process.exit(1);
+  }
+  
+  try {
+    await downloadLists(listType);
+  } catch (error) {
+    console.error('Fatal error:', error);
+    process.exit(1);
+  }
+}
 
-switch (listType) {
-  case LIST_TYPE.ALLOWLIST: {
-    await downloadLists(PROCESSING_FILENAME.ALLOWLIST, allowlistUrls);
-    break;
-  }
-  case LIST_TYPE.BLOCKLIST: {
-    await downloadLists(PROCESSING_FILENAME.BLOCKLIST, blocklistUrls);
-    break;
-  }
-  default:
-    await Promise.all([
-      downloadLists(PROCESSING_FILENAME.ALLOWLIST, allowlistUrls),
-      downloadLists(PROCESSING_FILENAME.BLOCKLIST, blocklistUrls),
-    ]);
+// Run if this file is executed directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main();
 }
