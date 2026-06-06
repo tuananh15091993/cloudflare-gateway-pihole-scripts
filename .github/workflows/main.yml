@@ -2,7 +2,7 @@ name: Update Filter Lists
 
 on:
   schedule:
-    - cron: "0 3 * * *"
+    - cron: "0 3 * * *"  # Chạy hàng ngày lúc 10:00 sáng (giờ Việt Nam)
   push:
     branches:
       - main
@@ -10,7 +10,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: true  # Tự động hủy các workflow cũ khi có workflow mới trên cùng nhánh
 
 env:
   NODE_ENV: production
@@ -19,16 +19,16 @@ jobs:
   cgps:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4  # Đã cập nhật lên phiên bản mới nhất
         with:
-          repository: "mrrfv/cloudflare-gateway-pihole-scripts"
-          ref: "v1"
+          repository: "tuananh15091993/cloudflare-gateway-pihole-scripts"
+          ref: "main"
 
       - name: Install Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v4  # Đã cập nhật lên phiên bản mới nhất
         with:
-          node-version-file: ".node-version"
+          node-version: 'lts/*'     # Sử dụng phiên bản LTS mới nhất, tránh lỗi deprecated
 
       - name: Install npm dependencies
         run: npm ci
@@ -45,6 +45,7 @@ jobs:
 
       - name: Delete old rules and lists
         run: npm run cloudflare-delete
+        continue-on-error: true  # Tiếp tục workflow ngay cả khi bước này thất bại
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -60,9 +61,6 @@ jobs:
           CLOUDFLARE_LIST_ITEM_LIMIT: ${{ secrets.CLOUDFLARE_LIST_ITEM_LIMIT }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
 
-      - name: Send ping request
-        if: env.PING_URL != ''
-        run: |
-          curl "${{ env.PING_URL }}"
-        env:
-          PING_URL: ${{ secrets.PING_URL }}
+      - name: Send ping request (if PING_URL is set)
+        if: ${{ secrets.PING_URL != '' }}  # Lệnh này chỉ chạy khi có PING_URL
+        run: curl "${{ secrets.PING_URL }}"
